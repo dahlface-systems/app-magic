@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App Magic</title>
+<link rel="stylesheet" href="app.css">
+<style>
+body{padding:16px;gap:12px;overflow:auto;background:var(--ground)}
+.box{padding:12px 14px;border-radius:16px;background:var(--panel);display:flex;flex-direction:column;gap:8px}
+.plan{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.plan:last-child{border-bottom:0}
+.plan b{flex:1}.plan .meter{flex:0 0 90px;height:6px}.plan .meter i{height:6px}.plan span{flex:0 0 108px;text-align:right;font-size:13px}
+.acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.acts button{min-height:44px;border-radius:12px;border:0;background:var(--panel);font-size:13px;font-weight:600}
+.two{display:flex;gap:6px}.two .btn{flex:1;min-height:40px;font-size:13px;padding:0 10px}.two #ask{flex:0 0 88px}
+</style>
+</head>
+<body>
+<form id="req" class="composer" style="border-radius:22px">
+  <label for="req-text" class="hide">Ask, or make changes to App Magic</label>
+  <textarea id="req-text" rows="2" placeholder="Ask something, or say what App Magic should do differently" style="padding-left:10px"></textarea>
+</form>
+<div class="two"><button class="btn accent" id="ask">Ask</button><button class="btn outline" id="change">Make changes to App Magic</button></div>
+<div class="box"><span class="label">Working on now</span><b id="now">Nothing right now</b></div>
+<div><div class="label" style="padding-bottom:4px">Plans and usage</div><div id="plans"></div></div>
+<div class="acts">
+  <button data-open="home">Open App Magic</button><button data-open="apps">Bring in an app</button>
+  <button data-open="capabilities">Capabilities</button><button id="check">Check App Magic</button>
+</div>
+<p class="note" id="foot">Lives on your Mac. Yours to edit and improve.</p>
+<script>
+const $ = (s) => document.querySelector(s);
+const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.magic;
+const bridge = (cmd, data = {}) => { if (native) native.postMessage({ cmd, ...data }); };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const post = (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+// What App Magic is doing, in one line: the conversation's current step, and how much is still going on in the background.
+function nowLine(busy, background, doing) {
+  const bg = background ? `${background} ${background === 1 ? 'job' : 'jobs'} running in the background` : '';
+  return busy ? (doing || 'Working in the conversation') + (bg ? ' · ' + bg : '') : bg ? cap(bg) : 'Nothing right now';
+}
+const cap = (s) => s.replace(/^./, (c) => c.toUpperCase());
+async function refresh() {
+  const s = await fetch('/api/state').then((r) => r.json());
+  const words = { 'in-use': 'In use now', 'nearly-full': 'Nearly full', full: 'Full', ready: 'Ready', 'needs-you': 'Needs you', 'not-yet': 'Not set up' };
+  $('#plans').innerHTML = s.accounts.accounts.map((a) => `<div class="plan"><b>${esc(a.service)}${a.plan ? ', ' + esc(a.plan) : ''}</b>${a.used != null ? `<div class="meter"><i style="width:${Math.max(3, Math.round(a.used * 100))}%"></i></div>` : ''}<span>${a.state === 'needs-you' ? '<span class="chip dark">Needs you</span>' : esc(words[a.state] || a.state)}</span></div>`).join('');
+  $('#now').textContent = nowLine(s.busy.some((x) => x.busy), s.busy.reduce((n, x) => n + (x.background || 0), 0));
+}
+$('#ask').onclick = async () => { const t = $('#req-text').value.trim(); if (t) await post('/api/chat', { c: 'home', text: t }); $('#req-text').value = ''; bridge('openMain', { view: 'home' }); };
+$('#change').onclick = async () => { const r = await post('/api/workshop', { request: $('#req-text').value.trim() }); $('#foot').textContent = r.ok ? 'The workshop is open in its own window.' : 'The workshop did not open: ' + (r.error || ''); $('#req-text').value = ''; };
+$('#check').onclick = () => bridge('openMain', { view: 'capabilities', then: 'selfAudit' });
+document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => bridge('openMain', { view: b.dataset.open }); });
+const es = new EventSource('/api/events');
+es.onmessage = (m) => { const e = JSON.parse(m.data); if (e.t === 'busy') $('#now').textContent = nowLine(e.busy, (e.tasks || []).length, e.doing); if (e.t === 'usage' || e.t === 'refresh') refresh(); };
+refresh();
+</script>
+</body>
+</html>

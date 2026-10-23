@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>App Magic</string>
+  <key>CFBundleDisplayName</key><string>App Magic</string>
+  <key>CFBundleIdentifier</key><string>local.appmagic.app</string>
+  <key>CFBundleExecutable</key><string>AppMagic</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleIconFile</key><string>AppMagic</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>NSAppleEventsUsageDescription</key><string>App Magic opens its workshop in a Terminal window, where Claude changes App Magic itself.</string>
+  <key>NSHumanReadableCopyright</key><string>Lives on your Mac. Yours to edit and improve.</string>
+</dict>
+</plist>

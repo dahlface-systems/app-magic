@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App Magic</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="brand" data-view="home" aria-label="App Magic, home">
+    <span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.8 8 16 11.2 22 12C16 12.8 12.8 16 12 22C11.2 16 8 12.8 2 12C8 11.2 11.2 8 12 2Z"/></svg></span>
+    <span>App Magic</span>
+  </button>
+  <nav aria-label="App Magic">
+    <button data-view="home" class="on">Home</button>
+    <button data-view="apps">Apps</button>
+    <button data-view="capabilities">Capabilities</button>
+    <button data-view="accounts">Accounts</button>
+  </nav>
+  <div class="right">
+    <button id="setup-open" class="pill-outline dark" data-setup hidden>Setup</button>
+    <button id="ask-open" class="pill-outline" title="Ask about anything (⌘K)">Ask</button>
+    <button id="status-pill" class="pill" data-view="accounts"><span class="dot"></span><span id="status-line">Checking accounts</span></button>
+  </div>
+</header>
+
+<main>
+  <!-- Home: a conversation, with what App Magic knows beside it -->
+  <section id="view-home" class="view on">
+    <div class="chat">
+      <div id="thread" class="thread" aria-live="polite"></div>
+      <div id="doing" class="doing" role="status" hidden><span class="now"></span><span class="clock"></span></div>
+      <div id="bg" class="bg" aria-live="polite" hidden></div>
+      <div id="quick" class="quick"></div>
+      <form id="composer" class="composer">
+        <button type="button" id="add-file" class="round soft" aria-label="Drop in files" title="Drop in files">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <label for="say" class="hide">Message App Magic</label>
+        <textarea id="say" rows="1" placeholder="Say anything"></textarea>
+        <button type="button" id="stop" class="round dark" aria-label="Stop" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor"/></svg>
+        </button>
+        <button type="submit" id="send" class="round accent" aria-label="Send">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+      <input type="file" id="file-input" multiple hidden>
+    </div>
+    <aside class="drawer">
+      <h2>What I know so far</h2>
+      <div id="know" class="rows"></div>
+      <p id="know-hint" class="hint"></p>
+      <div class="grow"></div>
+      <h3 class="label">Carry on</h3>
+      <div id="carry" class="carry"></div>
+    </aside>
+  </section>
+
+  <!-- Apps: made here or brought in -->
+  <section id="view-apps" class="view pad">
+    <div class="head">
+      <h1>Your apps</h1>
+      <div class="actions">
+        <button class="btn outline" id="bring-open">Bring one in</button>
+        <button class="btn accent" id="make-new">Make something new</button>
+      </div>
+    </div>
+    <div id="bring" class="bring" hidden>
+      <div class="bring-grid">
+        <div class="card">
+          <h3>From GitHub</h3>
+          <p>I list what's there and you tick the ones you want. I only fetch the ones you tick.</p>
+          <button class="btn accent" id="gh-load">Show my GitHub</button>
+        </div>
+        <div class="card">
+          <h3>From this Mac</h3>
+          <p>Say where to look, in your own words, or let me look everywhere. I open each thing I find and read its code to see whether it's one of yours.</p>
+          <div class="field"><input id="where" type="text" placeholder="my dev folder, or: something called recipes in Documents" aria-label="Where to look"><button class="btn dark" id="where-go">Look</button></div>
+          <div class="actions"><button class="btn outline" id="look-everywhere">Look all over my computer</button><button class="link" id="pick-folder" hidden>Choose a folder</button></div>
+        </div>
+      </div>
+      <div id="found" class="found"></div>
+      <p class="note">Your originals stay exactly where they are. I work on my own copy, and I leave out downloaded libraries and any file with a password in it.</p>
+    </div>
+    <div id="apps-table" class="table"></div>
+    <p class="foot">Made here or brought in, they all work the same way: open one, say what to change, watch it happen.</p>
+  </section>
+
+  <!-- Capabilities -->
+  <section id="view-capabilities" class="view pad">
+    <div class="head"><div><h1>What App Magic can do.</h1><p class="sub">Each one is a single sign-in, kept locked away and asked for only when an app needs it.</p></div></div>
+    <div id="caps" class="tiles"></div>
+    <form id="learn" class="composer wide">
+      <label for="learn-text" class="hide">Ask App Magic to learn something</label>
+      <input id="learn-text" type="text" placeholder="Missing something? Ask App Magic to learn it. For example: text me when an order comes in">
+      <button type="submit" class="round accent" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </form>
+    <div class="selfcheck">
+      <div><h3>App Magic's own safety check</h3><p id="self-line">Checks what App Magic can reach, what it stores, and what is switched on.</p></div>
+      <button class="btn outline" id="self-audit">Check App Magic</button>
+    </div>
+  </section>
+
+  <!-- Accounts -->
+  <section id="view-accounts" class="view pad">
+    <div class="head"><div><h1 id="acct-head">Accounts</h1><p class="sub">Everything App Magic's AI does runs on your own accounts. It never uses a separate key.</p></div></div>
+    <div id="accts" class="accts"></div>
+    <p class="foot" id="acct-foot"></p>
+  </section>
+
+</main>
+
+<footer class="bottom">
+  <span>App Magic lives on your Mac. It's yours to edit and improve.</span>
+  <span class="actions"><button class="link" id="problems-link" hidden></button><button class="link" id="change-open">Make changes to App Magic</button></span>
+</footer>
+
+<!-- When something goes wrong -->
+<div id="problem" class="problem" role="alert" hidden>
+  <div><b id="problem-say"></b><small id="problem-what"></small></div>
+  <div class="actions"><button class="btn accent" id="problem-fix">Fix it with Claude</button><button class="link" id="problem-dismiss">Dismiss</button></div>
+</div>
+
+<!-- Everything that went wrong lately -->
+<div id="problems-modal" class="overlay" hidden>
+  <div class="modal wide" role="dialog" aria-label="Problems">
+    <div class="head"><div><p class="label">Problems</p><h2>What went wrong lately</h2></div><button class="link" data-close>Close</button></div>
+    <p class="note">"Fix it with Claude" opens the workshop, where Claude finds the cause in App Magic's own code and fixes it.</p>
+    <div id="problems-list" class="checks"></div>
+    <div class="actions end"><button class="link" id="problems-clear">Dismiss all</button></div>
+  </div>
+</div>
+
+<!-- First run -->
+<div id="setup" class="overlay setup" hidden>
+  <div class="modal setup-card" role="dialog" aria-label="Set up App Magic">
+    <div class="setup-head"><span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.8 8 16 11.2 22 12C16 12.8 12.8 16 12 22C11.2 16 8 12.8 2 12C8 11.2 11.2 8 12 2Z"/></svg></span><ol id="setup-steps" class="setup-steps"></ol><button class="link" id="setup-close">Later</button></div>
+    <div id="setup-body" class="setup-body"></div>
+  </div>
+</div>
+
+<!-- A design, opened from its card in the conversation. The canvas itself is the Mac app's browser pane, laid over the slot. -->
+<div id="design" class="overlay sheet" hidden>
+  <div class="design-sheet" role="dialog" aria-label="Design">
+    <div class="design-bar">
+      <div class="design-title"><strong id="design-name">Design</strong><span id="design-saved">Saved in App Magic</span></div>
+      <div class="actions"><button class="btn outline" id="design-reload">Reload</button><button class="btn outline" id="design-external">Open in my browser</button><button class="btn dark" id="design-close">Back to the chat</button></div>
+    </div>
+    <div id="signin-help" class="signin-help" hidden>
+      <div class="signin-text">
+        <strong>Sign in to Claude once and your designs show up here.</strong>
+        <span>Passkeys and “Continue with Google” can’t work inside App Magic, since Apple only lets real browsers use them. Use your email instead: press <b>Sign in with email</b>, type your email, then type the code Claude emails you. If the email has only a button, right-click it, choose Copy Link, and press <b>Use copied link</b>.</span>
+      </div>
+      <div class="actions"><button class="btn accent" id="signin-email">Sign in with email</button><button class="btn outline" id="signin-link">Use copied link</button></div>
+    </div>
+    <div id="browser-slot" class="browser-slot"><div class="browser-empty"><p id="browser-msg">The design canvas opens here.</p><a id="browser-link" class="btn accent" target="_blank" rel="noopener" hidden>Open the canvas</a></div></div>
+    <div class="design-foot">
+      <div id="design-last" class="design-last"></div>
+      <form id="change" class="composer">
+        <label for="change-text" class="hide">Change anything</label>
+        <input id="change-text" type="text" placeholder="Change anything. Say it, or show me.">
+        <button type="submit" class="round accent" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Ask: the pop-up command bar -->
+<div id="ask" class="overlay" hidden>
+  <div class="ask-card" role="dialog" aria-label="Ask App Magic">
+    <form id="ask-form" class="ask-row">
+      <span class="mark big"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.8 8 16 11.2 22 12C16 12.8 12.8 16 12 22C11.2 16 8 12.8 2 12C8 11.2 11.2 8 12 2Z"/></svg></span>
+      <label for="ask-text" class="hide">Ask App Magic</label>
+      <input id="ask-text" type="text" placeholder="Ask about anything you can see" autocomplete="off">
+    </form>
+    <div id="ask-about" class="ask-about"></div>
+    <div id="ask-answer" class="ask-answer" hidden></div>
+    <div id="ask-rows" class="ask-rows"></div>
+    <div class="ask-foot">It answers first, then offers to do something about it. Esc closes.</div>
+  </div>
+</div>
+
+<!-- Make changes to App Magic itself -->
+<div id="change-modal" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-label="Make changes to App Magic">
+    <h2><label for="change-request">Make changes to App Magic</label></h2>
+    <p>Say what should be different. A separate workshop window opens, where Claude changes App Magic itself. It can close and reopen this app while it works, which is why it isn't done in here.</p>
+    <textarea id="change-request" rows="3" placeholder="What should App Magic do differently?"></textarea>
+    <div class="actions end"><button class="link" data-close>Not now</button><button class="btn accent" id="change-go">Open the workshop</button></div>
+    <p class="note" id="change-note">In the workshop Claude works without asking permission for each step. Every change is written down in your Changes folder.</p>
+  </div>
+</div>
+
+<!-- A safety report -->
+<div id="audit-modal" class="overlay" hidden>
+  <div class="modal wide" role="dialog" aria-label="Safety checks">
+    <div class="head"><div><p class="label" id="audit-target"></p><h2 id="audit-summary"></h2></div><button class="link" data-close>Close</button></div>
+    <div id="audit-checks" class="checks"></div>
+    <div class="actions end"><button class="btn accent" id="audit-fix" hidden>Fix these for me</button></div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="dropzone" class="dropzone" hidden><div>Drop it in. I'll look at it and remember what it tells me.</div></div>
+<script src="app.js"></script>
+</body>
+</html>

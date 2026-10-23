@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>App Magic</title><link rel="stylesheet" href="app.css">
+<style>
+body{align-items:center;justify-content:center;padding:40px;overflow:auto}
+.card{width:min(560px,92vw);display:flex;flex-direction:column;gap:18px}
+.card h1{font-size:34px}.card p{font-size:17px;line-height:1.5;color:var(--sub)}
+.wait{display:flex;align-items:center;gap:10px;font-size:15px}
+</style></head>
+<body>
+<div class="card">
+  <span class="mark big"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.8 8 16 11.2 22 12C16 12.8 12.8 16 12 22C11.2 16 8 12.8 2 12C8 11.2 11.2 8 12 2Z"/></svg></span>
+  <h1>One thing from Apple first.</h1>
+  <p>App Magic needs Apple's free developer tools. They're the same tools every app on a Mac is built with, and they include the parts App Magic runs on.</p>
+  <p>Your Mac shows its own window to install them. It takes a few minutes; App Magic carries on by itself when they're in.</p>
+  <div class="actions"><button class="btn accent" id="go">Install Apple's tools</button><button class="link" id="check">I already did</button></div>
+  <div class="wait" id="wait" hidden><span class="pulse" style="width:10px;height:10px;border-radius:999px;background:#c2416b;display:inline-block"></span><span id="wait-text">Waiting for Apple's installer to finish…</span></div>
+</div>
+<script>
+const post = (cmd) => window.webkit && window.webkit.messageHandlers.magic.postMessage({ cmd });
+document.getElementById('go').onclick = () => { post('installTools'); document.getElementById('wait').hidden = false; document.getElementById('go').disabled = true; };
+document.getElementById('check').onclick = () => post('toolsCheck');
+window.toolsMissing = () => { document.getElementById('wait').hidden = false; document.getElementById('wait-text').textContent = "They aren't in yet. Press Install, or wait for Apple's installer to finish."; };
+window.toolsReady = () => { document.getElementById('wait-text').textContent = 'Done. Opening App Magic…'; };
+</script>
+</body>
+</html>

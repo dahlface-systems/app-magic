@@ -1,0 +1,15 @@
+app/build/
+app/shell/.build/
+__pycache__/
+*.pyc
+.DS_Store
+dist/
+
+# Private working files: kept on the author's Mac, never published
+Claude Sessions/
+codex-briefs/
+DESIGN-HISTORY.md
+PLAN.md
+designs/
+layout-options/
+visual-options/

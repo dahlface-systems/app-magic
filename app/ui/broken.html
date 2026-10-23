@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>App Magic</title><link rel="stylesheet" href="app.css">
+<style>
+body{align-items:center;justify-content:center;padding:40px;overflow:auto}
+.card{width:min(640px,92vw);display:flex;flex-direction:column;gap:16px}
+.card h1{font-size:34px}.card p{font-size:17px;line-height:1.5;color:var(--sub)}
+pre{max-height:220px;overflow:auto;padding:12px 14px;border-radius:14px;background:var(--panel);font:12px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0}
+</style></head>
+<body>
+<div class="card">
+  <span class="mark big"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.8 8 16 11.2 22 12C16 12.8 12.8 16 12 22C11.2 16 8 12.8 2 12C8 11.2 11.2 8 12 2Z"/></svg></span>
+  <h1>App Magic didn't start properly.</h1>
+  <p>The part of App Magic that does the work stopped as it was starting. This usually means a recent change to App Magic needs fixing. Claude can look into it in the workshop.</p>
+  <div class="actions"><button class="btn accent" id="fix">Fix it with Claude</button><button class="btn outline" id="retry">Try again</button><button class="link" id="show">Show App Magic's code</button></div>
+  <p id="note" class="note" hidden>The workshop opened in its own window. When Claude has fixed it, press Try again.</p>
+  <details><summary class="note">What went wrong, in detail</summary><pre id="log"></pre></details>
+</div>
+<script>
+const post = (cmd) => window.webkit && window.webkit.messageHandlers.magic.postMessage({ cmd });
+document.getElementById('log').textContent = new URLSearchParams(location.search).get('log') || '(nothing was written to the log)';
+document.getElementById('fix').onclick = () => { post('fixService'); document.getElementById('note').hidden = false; };
+document.getElementById('retry').onclick = () => post('retryService');
+document.getElementById('show').onclick = () => post('openSource');
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+#!/bin/bash
+# App Magic's command line: build it, run it, restart it, open the workshop, run the checks, package it to send.
+set -euo pipefail
+SRC="$(cd "$(dirname "$0")" && pwd)"
+APP="$SRC/build/App Magic.app"
+MAGIC_HOME="${APP_MAGIC_HOME:-$HOME/App Magic}"
+BUNDLE_ID="local.appmagic.app"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+usage() { cat <<USAGE
+App Magic  ($SRC)
+
+  ./magic run                open the app (builds first if needed)
+  ./magic reload             restart only the service; the window reloads itself (enough for ui/ and service/ changes)
+  ./magic restart            close App Magic and open it again
+  ./magic rebuild            rebuild the Mac app (after changing shell/) and reopen it
+  ./magic quit               close the app
+  ./magic workshop [words]   open the workshop: a styled terminal where Claude Code changes App Magic itself
+  ./magic signin             open a small terminal to sign in to Claude
+  ./magic audit [self|PATH]  run the security audit on App Magic itself, or on an app folder
+  ./magic test               run the service tests
+  ./magic uitest             drive the whole window in a headless browser against a stand-in Claude
+  ./magic selfcheck          start the built app without a window and prove the service and the page work
+  ./magic build              build the Mac app into build/App Magic.app (this folder stays its source)
+  ./magic package            build the version to send to someone: universal, self-contained, zipped into ../dist
+  ./magic install            put the app in ~/Applications
+  ./magic service            run the service in this terminal (for development)
+USAGE
+}
+
+# The app that is running (or last ran): the shell writes its own path here, so restart reopens the same bundle.
+running_app() {
+  local p=""; [ -f "$MAGIC_HOME/.magic/app-path" ] && p="$(cat "$MAGIC_HOME/.magic/app-path")"
+  if [ -n "$p" ] && [ -d "$p" ]; then printf '%s' "$p"; else printf '%s' "$APP"; fi
+}
+
+assemble() {   # assemble <binary> <bundle> <dev|release>
+  local bin="$1" bundle="$2" kind="$3"
+  rm -rf "$bundle"
+  mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+  cp "$bin" "$bundle/Contents/MacOS/AppMagic"
+  sed "s/__VERSION__/$(cat "$SRC/VERSION")/" "$SRC/shell/Info.plist" > "$bundle/Contents/Info.plist"
+  [ -f "$SRC/shell/AppMagic.icns" ] && cp "$SRC/shell/AppMagic.icns" "$bundle/Contents/Resources/AppMagic.icns"
+  if [ "$kind" = dev ]; then
+    printf '%s\n' "$SRC" > "$bundle/Contents/Resources/source-dir"         # a developer build runs straight from this folder
+  else                                                                      # a build to send carries its own source
+    mkdir -p "$bundle/Contents/Resources/source"
+    rsync -a --exclude build --exclude .build --exclude __pycache__ --exclude '*.pyc' --exclude 'Claude Sessions' --exclude .DS_Store \
+      "$SRC/" "$bundle/Contents/Resources/source/"
+  fi
+  codesign --force --deep --sign - "$bundle" >/dev/null 2>&1 || true
+}
+
+build() {
+  swift build -c release --package-path "$SRC/shell" 2>&1 | grep -v "^\[" || true
+  local bin; bin="$(swift build -c release --package-path "$SRC/shell" --show-bin-path)/AppMagic"
+  [ -x "$bin" ] || { echo "build failed" >&2; exit 1; }
+  assemble "$bin" "$APP" dev
+  echo "built $APP"
+}
+
+# Signing for a build to send: the Developer ID certificate if this Mac has one (so it opens with no warning once
+# notarized), otherwise ad hoc. MAGIC_SIGN overrides the identity.
+devid() { [ -n "${MAGIC_SIGN:-}" ] && { printf '%s' "$MAGIC_SIGN"; return; }
+  security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1; }
+
+# Apple's notary service, with the App Store Connect key in ~/.appstoreconnect (rollout.env + private_keys/AuthKey_<id>.p8).
+notarize() {   # notarize <zip>
+  local envf="$HOME/.appstoreconnect/rollout.env" kid iss
+  [ -f "$envf" ] || { echo "no App Store Connect key, so not notarized" >&2; return 1; }
+  kid="$(sed -n 's/^ASC_KEY_ID=//p' "$envf")"; iss="$(sed -n 's/^ASC_ISSUER_ID=//p' "$envf")"
+  xcrun notarytool submit "$1" --key "$HOME/.appstoreconnect/private_keys/AuthKey_$kid.p8" --key-id "$kid" --issuer "$iss" --wait --timeout 30m
+}
+
+package() {
+  local v; v="$(cat "$SRC/VERSION")"
+  swift build -c release --arch arm64 --arch x86_64 --package-path "$SRC/shell" 2>&1 | grep -v "^\[" | grep -v "x86_64 architecture is deprecated" || true
+  local bin; bin="$(swift build -c release --arch arm64 --arch x86_64 --package-path "$SRC/shell" --show-bin-path)/AppMagic"
+  [ -x "$bin" ] || { echo "universal build failed" >&2; exit 1; }
+  local out="$SRC/../dist" stage; stage="$(mktemp -d)"
+  mkdir -p "$out"
+  assemble "$bin" "$stage/App Magic.app" release
+  local id; id="$(devid)"
+  rm -f "$out/App-Magic-$v.zip"
+  if [ -n "$id" ]; then
+    codesign --force --options runtime --timestamp --entitlements "$SRC/shell/AppMagic.entitlements" --sign "$id" "$stage/App Magic.app"
+    codesign --verify --strict --verbose=2 "$stage/App Magic.app"
+    ditto -c -k --sequesterRsrc --keepParent "$stage/App Magic.app" "$stage/submit.zip"
+    if notarize "$stage/submit.zip" | tee "$stage/notary.txt" && grep -q "status: Accepted" "$stage/notary.txt"; then
+      xcrun stapler staple "$stage/App Magic.app"
+      echo "signed by $id, notarized and stapled"
+    else
+      echo "signed by $id but NOT notarized: people will still need Open Anyway" >&2
+    fi
+  else
+    echo "no Developer ID certificate on this Mac: signed ad hoc, people will need Open Anyway" >&2
+  fi
+  ditto -c -k --sequesterRsrc --keepParent "$stage/App Magic.app" "$out/App-Magic-$v.zip"
+  rm -rf "$stage"
+  echo "$out/App-Magic-$v.zip"
+}
+
+app_running() { pgrep -f "App Magic.app/Contents/MacOS/AppMagic\$" >/dev/null 2>&1; }
+
+quit_app() {
+  osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do app_running || return 0; sleep 0.3; done
+  pkill -f "App Magic.app/Contents/MacOS/AppMagic\$" 2>/dev/null || true
+}
+
+rebuild() {
+  swift build -c release --package-path "$SRC/shell" 2>&1 | grep -v "^\[" || true
+  local bin target; bin="$(swift build -c release --package-path "$SRC/shell" --show-bin-path)/AppMagic"; target="$(running_app)"
+  [ -x "$bin" ] || { echo "build failed" >&2; exit 1; }
+  quit_app
+  if [ -d "$target/Contents/MacOS" ]; then
+    cp "$bin" "$target/Contents/MacOS/AppMagic"
+    codesign --force --deep --sign - "$target" >/dev/null 2>&1 || true
+  else
+    assemble "$bin" "$APP" dev; target="$APP"
+  fi
+  open "$target"; echo "rebuilt and reopened $target"
+}
+
+# Open a Terminal window dressed for App Magic, on the same screen as App Magic's own window.
+terminal() {   # terminal <title> <command>
+  local bounds=""
+  [ -f "$MAGIC_HOME/.magic/window.json" ] && bounds="$(python3 -c "import json,sys; b=json.load(open(sys.argv[1])).get('bounds'); print(','.join(str(int(x)) for x in b) if b else '')" "$MAGIC_HOME/.magic/window.json" 2>/dev/null || true)"
+  /usr/bin/osascript - "$1" "$2" "$bounds" <<'APPLESCRIPT'
+on run argv
+  set theTitle to item 1 of argv
+  set theCommand to item 2 of argv
+  set theBounds to item 3 of argv
+  tell application "Terminal"
+    activate
+    set t to do script theCommand
+    delay 0.3
+    tell t
+      set background color to {10794, 8481, 12336}
+      set normal text color to {63736, 61166, 62194}
+      set bold text color to {65535, 65535, 65535}
+      set cursor color to {62194, 46517, 50372}
+      set custom title to theTitle
+      set title displays custom title to true
+      set title displays device name to false
+      set title displays shell path to false
+      set title displays window size to false
+      try
+        set font name to "SF Mono"
+        set font size to 13
+      end try
+    end tell
+    if theBounds is not "" then
+      set AppleScript's text item delimiters to ","
+      set b to text items of theBounds
+      set AppleScript's text item delimiters to ""
+      try
+        set bounds of front window to {(item 1 of b) as integer, (item 2 of b) as integer, (item 3 of b) as integer, (item 4 of b) as integer}
+      end try
+    end if
+  end tell
+end run
+APPLESCRIPT
+}
+
+open_workshop() {
+  local record=""
+  if [ "${1:-}" = "--record" ]; then record="$2"; shift 2; fi
+  mkdir -p "$MAGIC_HOME/.magic"
+  local req="$MAGIC_HOME/.magic/workshop-request.txt"
+  printf '%s' "${*:-}" > "$req"
+  # A separate program on purpose: from here Claude can close, rebuild and reopen the app without cutting itself off.
+  terminal "App Magic workshop" "cd $(printf %q "$SRC") && clear && exec ./magic _workshop-session $(printf %q "$req") $(printf %q "$record")"
+}
+
+clean_claude_env() { for v in $(env | grep -E '^(CLAUDE|ANTHROPIC)' | cut -d= -f1); do unset "$v"; done; }
+
+workshop_session() {
+  local reqfile="${1:-}" record="${2:-}" req=""
+  [ -f "$reqfile" ] && req="$(cat "$reqfile")"
+  clean_claude_env                                       # the Claude account, nothing else
+  printf '\033[1;38;2;242;181;196m\n   ✦  App Magic workshop\033[0m\n'
+  printf '\033[38;2;205;189;202m   Claude Code is working on App Magic itself, in %s\n' "$SRC"
+  printf '   It works without asking permission for each step, and it can close and reopen App Magic.\n'
+  printf '   Every change is saved as a version and written down in %s/Changes.\n' "$MAGIC_HOME"
+  printf '   If Claude first asks you to pick a text style, just press Return.\033[0m\n\n'
+  local rules; rules="$(cat "$SRC/service/rules/workshop.md")"
+  [ -n "$record" ] && rules="$rules"$'\n\n'"The change record for this request is at: $record. Fill in its 'What changed' and 'How to undo' sections and set Status to done when you finish."
+  # The person's own Claude Code setup (their user settings included), with permissions bypassed.
+  local extra=(--dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true}' --append-system-prompt "$rules")
+  trust_source
+  if [ -n "$req" ]; then claude "${extra[@]}" "$req" || true; else claude "${extra[@]}" || true; fi
+  printf '\n\033[38;2;242;181;196m   Reopen App Magic with the changes? [Y/n] \033[0m'
+  read -r answer || answer=""
+  case "$answer" in n|N|no) ;; *) "$SRC/magic" restart ;; esac
+}
+
+# Claude Code asks once per folder whether to trust it, with "No" picked by default. This is App Magic's own code, so
+# the answer is recorded ahead of time (only that one flag, for this one folder) and the person isn't asked a question
+# they can't judge. Claude's first-run text-style question can still appear once: Return accepts it.
+trust_source() {
+  local root; root="$(git -C "$SRC" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$SRC")"
+  python3 - "$SRC" "$root" <<'PY' || true
+import json, os, sys, tempfile
+path = os.path.expanduser("~/.claude.json")
+try:
+    d = json.load(open(path))
+except Exception:
+    d = {}
+changed = False
+for folder in set(sys.argv[1:]):                 # the folder itself and, when it sits in a repository, the repository
+    p = d.setdefault("projects", {}).setdefault(folder, {})
+    if not p.get("hasTrustDialogAccepted"):
+        p["hasTrustDialogAccepted"] = changed = True
+if changed:
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".claude.json.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(d, f, indent=2)
+    os.replace(tmp, path)
+PY
+}
+
+signin_session() {
+  clean_claude_env
+  printf '\033[1;38;2;242;181;196m\n   ✦  Sign in to Claude\033[0m\n\n'
+  printf '\033[38;2;205;189;202m   Your browser opens and asks you to approve. App Magic never sees your password.\n'
+  printf '   If the browser shows a code, paste it here and press Return.\033[0m\n\n'
+  if claude auth login --claudeai; then
+    printf '\n\033[1;38;2;242;181;196m   You are signed in. App Magic carries on by itself; you can close this window.\033[0m\n'
+  else
+    printf '\n   Sign-in did not finish. Close this window and press "Sign in with Claude" again.\n'
+  fi
+}
+
+case "${1:-help}" in
+  build) build ;;
+  package) package ;;
+  run) [ -d "$APP" ] || build; open "$APP" ;;
+  restart) target="$(running_app)"; quit_app; open "$target"; echo "App Magic is open again." ;;
+  rebuild) rebuild ;;
+  reload) pid="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('pid',''))" "$MAGIC_HOME/.magic/config.json" 2>/dev/null || true)"
+          if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then echo "service restarting; the window reloads itself"; else echo "the service is not running"; fi ;;
+  quit) quit_app ;;
+  install) [ -d "$APP" ] || build; mkdir -p "$HOME/Applications"; rm -rf "$HOME/Applications/App Magic.app"; ln -s "$APP" "$HOME/Applications/App Magic.app"; echo "linked into ~/Applications" ;;
+  workshop) shift; open_workshop "$@" ;;
+  _workshop-session) shift; workshop_session "$@" ;;
+  signin) terminal "Sign in to Claude" "cd $(printf %q "$SRC") && clear && exec ./magic _signin-session" ;;
+  _signin-session) signin_session ;;
+  audit) python3 "$SRC/service/audit.py" "${2:-self}" ;;
+  test) python3 "$SRC/tests/test_service.py" ;;
+  uitest) shift; node "$SRC/tests/ui_test.mjs" "$@" ;;
+  selfcheck) [ -d "$APP" ] || build; "$APP/Contents/MacOS/AppMagic" --selfcheck ;;
+  service) exec python3 "$SRC/service/magicd.py" ;;
+  *) usage ;;
+esac
