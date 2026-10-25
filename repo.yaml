@@ -1,0 +1,7 @@
+# What this repo is, for the dahlface-systems catalog (.github-private/TIERS.yaml has the full list).
+name: app-magic
+what: "Make your own apps and dashboards on your Mac with Claude, no code needed"
+tier: oliver-only        # new, tier guessed
+home: air
+update: ""             # not set yet
+secrets: ""            # not described yet
